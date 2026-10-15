@@ -3275,3 +3275,43 @@ class TestSignInClientsAreNotShared:
         self._setup(second, redis)
 
         assert second._client is first._client
+
+
+@pytest.mark.unit
+class TestCancelOAuthEdgeCases:
+    def test_not_cancelled_without_redis_or_task(self):
+        assert _oauth(None)._cancelled() is False
+        assert _oauth(_FakeRedis(), task_id=None)._cancelled() is False
+
+    def test_a_redis_error_reads_as_not_cancelled(self):
+        redis = MagicMock()
+        redis.get.side_effect = RuntimeError("down")
+
+        assert _oauth(redis)._cancelled() is False
+
+    def test_register_task_ignores_missing_inputs(self):
+        from docsgpt.agents.tools.mcp_tool import MCPOAuthManager
+
+        redis = _FakeRedis()
+        manager = MCPOAuthManager(redis)
+        manager.register_task("", "alice")
+        manager.register_task("task-1", "")
+        MCPOAuthManager(None).register_task("task-1", "alice")
+
+        assert redis.data == {}
+
+    def test_register_task_survives_a_redis_error(self):
+        from docsgpt.agents.tools.mcp_tool import MCPOAuthManager
+
+        redis = MagicMock()
+        redis.setex.side_effect = RuntimeError("down")
+
+        MCPOAuthManager(redis).register_task("task-1", "alice")
+
+    def test_cancel_accepts_a_bytes_owner(self):
+        from docsgpt.agents.tools.mcp_tool import MCPOAuthManager
+
+        redis = _FakeRedis()
+        redis.data["mcp_oauth:owner:task-1"] = b"alice"
+
+        assert MCPOAuthManager(redis).cancel("task-1", "alice") is True

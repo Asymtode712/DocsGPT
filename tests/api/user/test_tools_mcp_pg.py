@@ -663,6 +663,15 @@ class TestMCPOAuthCancel:
 
         assert response.status_code == 400
 
+    def test_a_redis_failure_is_a_500(self, app):
+        manager = MagicMock()
+        manager.cancel.side_effect = RuntimeError("down")
+        with patch("docsgpt.api.user.tools.mcp.get_redis_instance", return_value=MagicMock()), \
+                patch("docsgpt.api.user.tools.mcp.MCPOAuthManager", return_value=manager):
+            response = self._post(app, {"task_id": "task-1"})
+
+        assert response.status_code == 500
+
     def test_requires_sign_in(self, app):
         response = self._post(app, {"task_id": "task-1"}, user=None)
 
